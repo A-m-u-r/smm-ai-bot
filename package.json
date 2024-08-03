@@ -1,0 +1,18 @@
+{
+  "name": "smm_ai_bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon bot.js",
+    "start": "node bot.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.3",
+    "node-telegram-bot-api": "^0.66.0",
+    "nodemon": "^3.1.4"
+  }
+}
