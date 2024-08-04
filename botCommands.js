@@ -44,7 +44,6 @@ const handleGenerateIdeas = async (bot, chatId, userId, context) => {
     if (!context) {
         return bot.sendMessage(chatId, "Пожалуйста, сначала установите контекст с помощью команды /setcontext");
     }
-
     const prompt = `Контекст: ${context}\n\nСгенерируйте 5 идей для постов, учитывая данный контекст.`;
     try {
         const response = await askClaude(prompt);
@@ -55,19 +54,20 @@ const handleGenerateIdeas = async (bot, chatId, userId, context) => {
     }
 };
 
-const handleGeneratePostPrompt = (bot, chatId, userId, context) => {
+const handleGeneratePostPrompt = async (bot, chatId, userId, context) => {
     if (!context) {
-        return bot.sendMessage(chatId, "Пожалуйста, сначала установите контекст с помощью команды /setcontext");
+       await bot.sendMessage(chatId, "Пожалуйста, сначала установите контекст с помощью команды /setcontext");
+        return;
     }
     waitingStates[chatId] = 'waiting_for_post_prompt';
     return bot.sendMessage(chatId, "Пожалуйста, введите дополнительные инструкции или тему для генерации поста. Используйте /cancel для отмены.");
 };
 
-const handleGeneratePost = async (bot, chatId, userId, context, userPrompt) => {
+const handleGeneratePost = async (bot, chatId, userId, context, userPrompt,size ) => {
     if (!context) {
         return "Пожалуйста, сначала установите контекст с помощью команды /setcontext";
     }
-    const systemPrompt = "Ты - опытный копирайтер. Твоя задача - создать продающий и интересный текст для поста в социальных сетях. Текст должен быть привлекательным, информативным и побуждать к действию. Используй эмоциональные триггеры, задавай вопросы аудитории, и заканчивай призывом к действию. Длина поста должна быть около 1000-1500 символов.";
+    const systemPrompt = `Ты - опытный копирайтер. Твоя задача - создать продающий и интересный текст для поста в социальных сетях. Текст должен быть привлекательным, информативным и побуждать к действию. Используй эмоциональные триггеры, задавай вопросы аудитории, и заканчивай призывом к действию. Длина поста должна быть около ${ size === 'large' ? '1500' : (size === 'medium' ? '1000' : '500')  } символов.`;
 
     const prompt = `${systemPrompt}\n\nКонтекст: ${context}\n\nДополнительные инструкции пользователя: ${userPrompt}\n\nСоздай текст поста для социальных сетей, учитывая данный контекст и инструкции пользователя. Используйте релевантные хэштеги и эмодзи для увеличения вовлеченности.`;
 
@@ -103,5 +103,5 @@ module.exports = {
     handleGeneratePost,
     handleGeneratePostPrompt,
     handleCancel,
-    waitingStates  // Экспортируем waitingStates для использования в основном файле
+    waitingStates
 };
