@@ -1,6 +1,7 @@
 const { askClaude } = require('./claudeApi');
 const { isAdmin, isSuperAdmin, setRole, getRole } = require('./userRoles');
 const contextManager = require('./contextManager');
+const { superAdminId } = require('./config');
 
 const waitingStates = {};
 
@@ -161,7 +162,7 @@ const handleDeleteContext = async (bot, chatId, userId) => {
 const handleCancel = (bot, chatId) => {
     if (waitingStates[chatId]) {
         delete waitingStates[chatId];
-        return "Текущая операция отменена.";
+        return bot.sendMessage(chatId, "Текущая операция отменена.")
     }
     return "Нет активных операций для отмены.";
 };

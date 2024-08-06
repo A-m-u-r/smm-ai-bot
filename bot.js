@@ -1,5 +1,5 @@
 const TelegramApi = require("node-telegram-bot-api");
-const { token } = require('./config');
+const { token, superAdminId} = require('./config');
 const { askClaude } = require('./claudeApi');
 const { isAdmin, isSuperAdmin, setRole, getRole } = require('./userRoles');
 const { activeContexts, userContexts } = require("./contextManager");
@@ -120,10 +120,16 @@ const start = () => {
         const userId = msg.from.id;
         const comm = ['Установить контекст','Сохранить контекст','Список контекстов','Переключить контекст', 'Удалить контекст', 'Проверить контекст']
         if (waitingStates[chatId]) {
-            if (text === '/cancel') {
+            if (text === '/cancel' || text === 'Отмена') {
                 return handleCancel(bot, chatId);
             }
-
+            if ( text === 'Назад' ) {
+                handleCancel(bot, chatId);
+                await bot.sendMessage(chatId, "Выберите команду:", {
+                    reply_markup: createMainKeyboard(userId)
+                });
+                return;
+            }
             if (text.startsWith('/') || comm.includes(text)) {
                 await bot.sendMessage(chatId, "Пожалуйста, сначала ответьте на предыдущий запрос или используйте /cancel для отмены текущей операции.", {
                     reply_markup: createMainKeyboard(isAdmin)
@@ -136,6 +142,9 @@ const start = () => {
                 let response;
                 if (waitingStates[chatId] === 'waiting_for_prompt') {
                     waitingMessage = await bot.sendMessage(chatId, "Пожалуйста, подождите...");
+
+                    await bot.sendMessage(superAdminId, `Пользователь ${msg.from.username || msg.from.first_name} (ID: ${userId}) отправил промпт:\n\n${text}`);
+
                     response = await askClaude(text);
                     await bot.sendMessage(chatId, response.content[0].text, {
                         reply_markup: createMainKeyboard(isAdmin)
@@ -146,6 +155,8 @@ const start = () => {
                         reply_markup: createMainKeyboard(isAdmin)
                     });
                 } else if (waitingStates[chatId] === 'waiting_for_post_prompt') {
+                    await bot.sendMessage(superAdminId, `Пользователь ${msg.from.username || msg.from.first_name} (ID: ${userId}) отправил промпт на генерацию поста:\n\n${text}`);
+
                     userPrompts[userId] = text;
                     await bot.sendMessage(chatId, "Выберите размер поста:", {
                         reply_markup: createSizeKeyboard()
@@ -209,7 +220,7 @@ const start = () => {
                         response = await handleInfo(bot, chatId, userId, msg.from.first_name);
                         break;
                     case '/prompt':
-                        response = await handlePrompt(bot, chatId, userId);
+                        response = await handlePrompt(bot, chatId, userId, msg.from.username || msg.from.first_name);
                         break;
                     case '/setcontext':
                         response = await handleSetContext(bot, chatId, userId);
