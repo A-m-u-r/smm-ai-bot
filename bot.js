@@ -14,23 +14,28 @@ const {
     handleGeneratePost,
     handleGeneratePostPrompt,
     handleCancel,
-    waitingStates
+    waitingStates,
+    handleSaveContext,
+    handleListContexts,
+    handleSwitchContext,
 } = require('./botCommands');
 
+const {activeContexts, userContexts} = require("./contextManager");
 const bot = new TelegramApi(token, {polling: true});
 
 const chatStates = {};
-const userContexts = {};
+
 const userPrompts = {};
 
-function createMainKeyboard(isAdmin) {
+function createMainKeyboard(userId) {
     const keyboard = [
         [{text: '/start'}, {text: '/info'}, {text: '/prompt'}],
         [{text: '/setcontext'}, {text: '/generateideas'}, {text: '/generatepost'}],
+        [{text: '/savecontext'}, {text: '/listcontexts'}, {text: '/switchcontext'}],
         [{text: '/cancel'}]
     ];
 
-    if (isSuperAdmin) {
+    if (isSuperAdmin(userId)) {
         keyboard.push([{text: '/setrole'}]);
     }
 
@@ -40,6 +45,7 @@ function createMainKeyboard(isAdmin) {
         one_time_keyboard: false
     };
 }
+
 
 function createSizeKeyboard() {
     return {
@@ -59,7 +65,7 @@ const start = () => {
 
         if (data.startsWith('size_')) {
             const size = data.split('_')[1];
-            const context = userContexts[userId];
+            const context = activeContexts[userId];
             const prompt = userPrompts[userId];
 
             if (!context || !prompt) {
@@ -119,19 +125,32 @@ const start = () => {
                     });
                 }
                 else if (waitingStates[chatId] === 'waiting_for_context') {
-                    userContexts[userId] = text;
+                    activeContexts[userId] = text;
                     await bot.sendMessage(chatId, "Контекст успешно установлен.", {
                         reply_markup: createMainKeyboard(isAdmin)
                     });
                 }
+
                 else if (waitingStates[chatId] === 'waiting_for_post_prompt') {
                     userPrompts[userId] = text;
                     await bot.sendMessage(chatId, "Выберите размер поста:", {
                         reply_markup: createSizeKeyboard()
                     });
                     return;
+                }  else if (waitingStates[chatId] === 'waiting_for_context_name') {
+                    if (!userContexts[userId]) userContexts[userId] = {};
+                    userContexts[userId][text] = activeContexts[userId];
+                    await bot.sendMessage(chatId, `Контекст "${text}" успешно сохранен.`);
                 }
-                if(waitingMessage){
+                else if (waitingStates[chatId] === 'waiting_for_context_switch') {
+                    if (userContexts[userId] && userContexts[userId][text]) {
+                        activeContexts[userId] = userContexts[userId][text];
+                        await bot.sendMessage(chatId, `Контекст успешно изменен на "${text}".`);
+                    } else {
+                        await bot.sendMessage(chatId, `Контекст "${text}" не найден.`);
+                    }
+                }
+                        if(waitingMessage){
                     await bot.deleteMessage(chatId, waitingMessage.message_id);
                 }
 
@@ -159,14 +178,25 @@ const start = () => {
                 await handlePrompt(bot, chatId, userId);
                 break;
             case '/setcontext':
-                await handleSetContext(bot, chatId);
+                await handleSetContext(bot, chatId, userId);
+                break;
+            case '/savecontext':
+                await handleSaveContext(bot, chatId, userId);
+                break;
+            case '/listcontexts':
+                await handleListContexts(bot, chatId, userId);
+                break;
+            case '/switchcontext':
+                await handleSwitchContext(bot, chatId, userId);
                 break;
             case '/generateideas':
-                await handleGenerateIdeas(bot, chatId, userId, userContexts[userId]);
+                await handleGenerateIdeas(bot, chatId, userId);
                 break;
+
             case '/generatepost':
-                await handleGeneratePostPrompt(bot, chatId, userId, userContexts[userId]);
+                await handleGeneratePostPrompt(bot, chatId, userId);
                 break;
+
             case '/cancel':
                 await handleCancel(bot, chatId);
                 break;
@@ -189,9 +219,10 @@ const start = () => {
         // Отправляем клавиатуру после каждого сообщения, если не ожидаем ввода
         if (!waitingStates[chatId]) {
             await bot.sendMessage(chatId, "Выберите команду:", {
-                reply_markup: createMainKeyboard(isAdmin)
+                reply_markup: createMainKeyboard(userId)
             });
         }
+
     });
 }
 

@@ -1,5 +1,6 @@
 const { askClaude } = require('./claudeApi');
 const { isAdmin, isSuperAdmin, setRole, getRole } = require('./userRoles');
+const { userContexts, activeContexts } = require('./contextManager');
 
 const waitingStates = {};
 
@@ -34,12 +35,12 @@ const handleSetRole = (bot, chatId, userId, args) => {
     return bot.sendMessage(chatId, `Роль пользователя ${targetUserId} установлена как ${newRole}`);
 };
 
-const handleSetContext = (bot, chatId) => {
+const handleSetContext = async (bot, chatId, userId) => {
     waitingStates[chatId] = 'waiting_for_context';
-    return bot.sendMessage(chatId, "Пожалуйста, введите контекст для ваших постов. Используйте /cancel для отмены.");
+    await bot.sendMessage(chatId, "Введите новый контекст:");
 };
-
-const handleGenerateIdeas = async (bot, chatId, userId, context) => {
+const handleGenerateIdeas = async (bot, chatId, userId) => {
+    const context = activeContexts[userId];
     if (!context) {
         return bot.sendMessage(chatId, "Пожалуйста, сначала установите контекст с помощью команды /setcontext");
     }
@@ -53,7 +54,8 @@ const handleGenerateIdeas = async (bot, chatId, userId, context) => {
     }
 };
 
-const handleGeneratePostPrompt = async (bot, chatId, userId, context) => {
+const handleGeneratePostPrompt = async (bot, chatId, userId) => {
+    const context = activeContexts[userId];
     if (!context) {
        await bot.sendMessage(chatId, "Пожалуйста, сначала установите контекст с помощью команды /setcontext");
         return;
@@ -62,7 +64,8 @@ const handleGeneratePostPrompt = async (bot, chatId, userId, context) => {
     return bot.sendMessage(chatId, "Пожалуйста, введите дополнительные инструкции или тему для генерации поста. Используйте /cancel для отмены.");
 };
 
-const handleGeneratePost = async (bot, chatId, userId, context, userPrompt,size ) => {
+const handleGeneratePost = async (bot, chatId, userId, userPrompt, size) => {
+    const context = activeContexts[userId];
     if (!context) {
         return "Пожалуйста, сначала установите контекст с помощью команды /setcontext";
     }
@@ -81,6 +84,23 @@ const handleGeneratePost = async (bot, chatId, userId, context, userPrompt,size 
 
 const handleUnknownCommand = (bot, chatId) => {
     return bot.sendMessage(chatId, 'Я тебя не понимаю, попробуй еще раз!');
+};
+const handleSaveContext = async (bot, chatId, userId) => {
+    waitingStates[chatId] = 'waiting_for_context_name';
+    await bot.sendMessage(chatId, "Введите имя для текущего контекста:");
+};
+
+const handleListContexts = async (bot, chatId, userId) => {
+    const contexts = userContexts[userId] || {};
+    const contextList = Object.keys(contexts).join('\n');
+    await bot.sendMessage(chatId, contextList ? `Ваши сохраненные контексты:\n${contextList}` : "У вас нет сохраненных контекстов.");
+};
+
+const handleSwitchContext = async (bot, chatId, userId) => {
+    waitingStates[chatId] = 'waiting_for_context_switch';
+    const contexts = userContexts[userId] || {};
+    const contextList = Object.keys(contexts).join('\n');
+    await bot.sendMessage(chatId, contextList ? `Выберите контекст для переключения:\n${contextList}` : "У вас нет сохраненных контекстов.");
 };
 
 const handleCancel = (bot, chatId) => {
@@ -102,5 +122,8 @@ module.exports = {
     handleGeneratePost,
     handleGeneratePostPrompt,
     handleCancel,
+    handleSaveContext,
+    handleListContexts,
+    handleSwitchContext,
     waitingStates
 };
