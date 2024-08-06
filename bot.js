@@ -2,6 +2,7 @@ const TelegramApi = require("node-telegram-bot-api");
 const { token } = require('./config');
 const { askClaude } = require('./claudeApi');
 const { isAdmin, isSuperAdmin, setRole, getRole } = require('./userRoles');
+const { activeContexts, userContexts } = require("./contextManager");
 
 const {
     handleStart,
@@ -20,23 +21,20 @@ const {
     handleSwitchContext,
 } = require('./botCommands');
 
-const {activeContexts, userContexts} = require("./contextManager");
 const bot = new TelegramApi(token, {polling: true});
-
-const chatStates = {};
 
 const userPrompts = {};
 
 function createMainKeyboard(userId) {
     const keyboard = [
-        [{text: '/start'}, {text: '/info'}, {text: '/prompt'}],
-        [{text: '/setcontext'}, {text: '/generateideas'}, {text: '/generatepost'}],
-        [{text: '/savecontext'}, {text: '/listcontexts'}, {text: '/switchcontext'}],
-        [{text: '/cancel'}]
+        [{text: 'Старт'}, {text: 'Инфо'}, {text: 'Промпт'}],
+        [{text: 'Установить контекст'}, {text: 'Генерировать идеи'}, {text: 'Генерировать пост'}],
+        [{text: 'Сохранить контекст'}, {text: 'Список контекстов'}, {text: 'Переключить контекст'}],
+        [{text: 'Отмена'}]
     ];
 
     if (isSuperAdmin(userId)) {
-        keyboard.push([{text: '/setrole'}]);
+        keyboard.push([{text: 'Установить роль'}]);
     }
 
     return {
@@ -46,13 +44,12 @@ function createMainKeyboard(userId) {
     };
 }
 
-
 function createSizeKeyboard() {
     return {
         inline_keyboard: [
-            [{text: 'Small', callback_data: 'size_small'},
-                {text: 'Medium', callback_data: 'size_medium'},
-                {text: 'Large', callback_data: 'size_large'}]
+            [{text: 'Маленький', callback_data: 'size_small'},
+                {text: 'Средний', callback_data: 'size_medium'},
+                {text: 'Большой', callback_data: 'size_large'}]
         ]
     };
 }
@@ -69,7 +66,7 @@ const start = () => {
             const prompt = userPrompts[userId];
 
             if (!context || !prompt) {
-                await bot.answerCallbackQuery(query.id, { text: "Ошибка: контекст или тема не установлены" });
+                await bot.answerCallbackQuery(query.id, {text: "Ошибка: контекст или тема не установлены"});
                 return;
             }
 
@@ -101,8 +98,6 @@ const start = () => {
         const chatId = msg.chat.id;
         const userId = msg.from.id;
 
-
-
         if (waitingStates[chatId]) {
             if (text === '/cancel') {
                 return handleCancel(bot, chatId);
@@ -123,26 +118,22 @@ const start = () => {
                     await bot.sendMessage(chatId, response.content[0].text, {
                         reply_markup: createMainKeyboard(isAdmin)
                     });
-                }
-                else if (waitingStates[chatId] === 'waiting_for_context') {
+                } else if (waitingStates[chatId] === 'waiting_for_context') {
                     activeContexts[userId] = text;
                     await bot.sendMessage(chatId, "Контекст успешно установлен.", {
                         reply_markup: createMainKeyboard(isAdmin)
                     });
-                }
-
-                else if (waitingStates[chatId] === 'waiting_for_post_prompt') {
+                } else if (waitingStates[chatId] === 'waiting_for_post_prompt') {
                     userPrompts[userId] = text;
                     await bot.sendMessage(chatId, "Выберите размер поста:", {
                         reply_markup: createSizeKeyboard()
                     });
                     return;
-                }  else if (waitingStates[chatId] === 'waiting_for_context_name') {
+                } else if (waitingStates[chatId] === 'waiting_for_context_name') {
                     if (!userContexts[userId]) userContexts[userId] = {};
                     userContexts[userId][text] = activeContexts[userId];
                     await bot.sendMessage(chatId, `Контекст "${text}" успешно сохранен.`);
-                }
-                else if (waitingStates[chatId] === 'waiting_for_context_switch') {
+                } else if (waitingStates[chatId] === 'waiting_for_context_switch') {
                     if (userContexts[userId] && userContexts[userId][text]) {
                         activeContexts[userId] = userContexts[userId][text];
                         await bot.sendMessage(chatId, `Контекст успешно изменен на "${text}".`);
@@ -150,7 +141,7 @@ const start = () => {
                         await bot.sendMessage(chatId, `Контекст "${text}" не найден.`);
                     }
                 }
-                        if(waitingMessage){
+                if (waitingMessage) {
                     await bot.deleteMessage(chatId, waitingMessage.message_id);
                 }
 
@@ -165,67 +156,103 @@ const start = () => {
             }
             delete waitingStates[chatId];
             return;
-        }
-
-        switch(text) {
-            case '/start':
-                await handleStart(bot, chatId);
-                break;
-            case '/info':
-                await handleInfo(bot, chatId, userId, msg.from.first_name);
-                break;
-            case '/prompt':
-                await handlePrompt(bot, chatId, userId);
-                break;
-            case '/setcontext':
-                await handleSetContext(bot, chatId, userId);
-                break;
-            case '/savecontext':
-                await handleSaveContext(bot, chatId, userId);
-                break;
-            case '/listcontexts':
-                await handleListContexts(bot, chatId, userId);
-                break;
-            case '/switchcontext':
-                await handleSwitchContext(bot, chatId, userId);
-                break;
-            case '/generateideas':
-                await handleGenerateIdeas(bot, chatId, userId);
-                break;
-
-            case '/generatepost':
-                await handleGeneratePostPrompt(bot, chatId, userId);
-                break;
-
-            case '/cancel':
-                await handleCancel(bot, chatId);
-                break;
-            default:
-                if (text.startsWith('/setrole')) {
-                    const args = text.split(' ').slice(1);
-                    return handleSetRole(bot, chatId, userId, args);
+        } else {
+            let response;
+            if (text.startsWith('/')) {
+                // Обработка команд
+                const command = text.split(' ')[0].toLowerCase();
+                const args = text.split(' ').slice(1);
+                switch (command) {
+                    case '/start':
+                        response = await handleStart(bot, chatId);
+                        break;
+                    case '/info':
+                        response = await handleInfo(bot, chatId, userId, msg.from.first_name);
+                        break;
+                    case '/prompt':
+                        response = await handlePrompt(bot, chatId, userId);
+                        break;
+                    case '/setcontext':
+                        response = await handleSetContext(bot, chatId, userId);
+                        break;
+                    case '/savecontext':
+                        response = await handleSaveContext(bot, chatId, userId);
+                        break;
+                    case '/listcontexts':
+                        response = await handleListContexts(bot, chatId, userId);
+                        break;
+                    case '/switchcontext':
+                        response = await handleSwitchContext(bot, chatId, userId);
+                        break;
+                    case '/generateideas':
+                        response = await handleGenerateIdeas(bot, chatId, userId);
+                        break;
+                    case '/generatepost':
+                        response = await handleGeneratePostPrompt(bot, chatId, userId);
+                        break;
+                    case '/cancel':
+                        response = await handleCancel(bot, chatId);
+                        break;
+                    case '/setrole':
+                        if (isSuperAdmin(userId)) {
+                            response = await handleSetRole(bot, chatId, userId, args);
+                        } else {
+                            response = "У вас нет прав для использования этой команды.";
+                        }
+                        break;
+                    default:
+                        response = await handleUnknownCommand(bot, chatId);
                 }
-           /* case '/setrole':
-                if (isSuperAdmin) {
-                    await handleSetRole(bot, chatId, userId, []);
-                } else {
-                    await bot.sendMessage(chatId, "У вас нет прав для использования этой команды.", {
-                        reply_markup: createMainKeyboard(isAdmin)
-                    });
-                }*/
-                return handleUnknownCommand(bot, chatId);
-        }
+            } else {
+                // Обработка текстовых сообщений (не команд)
+                switch (text) {
+                    case 'Старт':
+                        response = await handleStart(bot, chatId);
+                        break;
+                    case 'Инфо':
+                        response = await handleInfo(bot, chatId, userId, msg.from.first_name);
+                        break;
+                    case 'Промпт':
+                        response = await handlePrompt(bot, chatId, userId);
+                        break;
+                    case 'Установить контекст':
+                        response = await handleSetContext(bot, chatId, userId);
+                        break;
+                    case 'Сохранить контекст':
+                        response = await handleSaveContext(bot, chatId, userId);
+                        break;
+                    case 'Список контекстов':
+                        response = await handleListContexts(bot, chatId, userId);
+                        break;
+                    case 'Переключить контекст':
+                        response = await handleSwitchContext(bot, chatId, userId);
+                        break;
+                    case 'Генерировать идеи':
+                        response = await handleGenerateIdeas(bot, chatId, userId);
+                        break;
+                    case 'Генерировать пост':
+                        response = await handleGeneratePostPrompt(bot, chatId, userId);
+                        break;
+                    case 'Отмена':
+                        response = await handleCancel(bot, chatId);
+                        break;
+                    case 'Установить роль':
+                        if (isSuperAdmin(userId)) {
+                            response = "Пожалуйста, используйте команду в формате: /setrole [user_id] [role]";
+                        } else {
+                            response = "У вас нет прав для использования этой команды.";
+                        }
+                        break;
+                    default:
+                        response = await handleUnknownCommand(bot, chatId);
+                }
+            }
 
-        // Отправляем клавиатуру после каждого сообщения, если не ожидаем ввода
-        if (!waitingStates[chatId]) {
-            await bot.sendMessage(chatId, "Выберите команду:", {
+            // Отправляем ответ и клавиатуру после каждого сообщения
+            await bot.sendMessage(chatId, response || "Выберите команду:", {
                 reply_markup: createMainKeyboard(userId)
             });
         }
-
-    });
+    })
 }
-
-start();
-
-
+start()

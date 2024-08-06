@@ -6,62 +6,62 @@ const waitingStates = {};
 
 const handleStart = async (bot, chatId) => {
     await bot.sendSticker(chatId, `https://tlgrm.ru/_/stickers/e65/38d/e6538d88-ed55-39d9-a67f-ad97feea9c01/1.webp`);
-    return bot.sendMessage(chatId, `Привет! Добро пожаловать в бота.`);
+    return `Привет! Добро пожаловать в бота.`;
 };
 
 const handleInfo = (bot, chatId, userId, firstName) => {
     const role = getRole(userId);
-    return bot.sendMessage(chatId, `Тебя зовут ${firstName}. Твоя роль: ${role}`);
+    return `Тебя зовут ${firstName}. Твоя роль: ${role}`;
 };
 
 const handlePrompt = (bot, chatId, userId) => {
     if (!isAdmin(userId)) {
-        return bot.sendMessage(chatId, "У вас нет прав для использования этой команды.");
+        return "У вас нет прав для использования этой команды.";
     }
     waitingStates[chatId] = 'waiting_for_prompt';
-    return bot.sendMessage(chatId, "Пожалуйста, введите ваш запрос для Claude. Используйте /cancel для отмены.");
+    return "Пожалуйста, введите ваш запрос для Claude. Используйте /cancel для отмены.";
 };
 
 const handleSetRole = (bot, chatId, userId, args) => {
     if (!isSuperAdmin(userId)) {
-        return bot.sendMessage(chatId, "Только супер-администратор может устанавливать роли.");
+        return "Только супер-администратор может устанавливать роли.";
     }
     if (args.length !== 2) {
-        return bot.sendMessage(chatId, "Использование: /setrole [user_id] [role]");
+        return "Использование: /setrole [user_id] [role]";
     }
     const targetUserId = args[0];
     const newRole = args[1];
     setRole(targetUserId, newRole);
-    return bot.sendMessage(chatId, `Роль пользователя ${targetUserId} установлена как ${newRole}`);
+    return `Роль пользователя ${targetUserId} установлена как ${newRole}`;
 };
 
 const handleSetContext = async (bot, chatId, userId) => {
     waitingStates[chatId] = 'waiting_for_context';
-    await bot.sendMessage(chatId, "Введите новый контекст:");
+    return "Введите новый контекст:";
 };
+
 const handleGenerateIdeas = async (bot, chatId, userId) => {
     const context = activeContexts[userId];
     if (!context) {
-        return bot.sendMessage(chatId, "Пожалуйста, сначала установите контекст с помощью команды /setcontext");
+        return "Пожалуйста, сначала установите контекст с помощью команды /setcontext";
     }
     const prompt = `Контекст: ${context}\n\nСгенерируйте 5 идей для постов, учитывая данный контекст.`;
     try {
         const response = await askClaude(prompt);
-        return bot.sendMessage(chatId, response.content[0].text);
+        return response.content[0].text;
     } catch (error) {
         console.error('Error generating ideas:', error);
-        return bot.sendMessage(chatId, "Извините, произошла ошибка при генерации идей.");
+        return "Извините, произошла ошибка при генерации идей.";
     }
 };
 
 const handleGeneratePostPrompt = async (bot, chatId, userId) => {
     const context = activeContexts[userId];
     if (!context) {
-       await bot.sendMessage(chatId, "Пожалуйста, сначала установите контекст с помощью команды /setcontext");
-        return;
+        return "Пожалуйста, сначала установите контекст с помощью команды /setcontext";
     }
     waitingStates[chatId] = 'waiting_for_post_prompt';
-    return bot.sendMessage(chatId, "Пожалуйста, введите дополнительные инструкции или тему для генерации поста. Используйте /cancel для отмены.");
+    return "Пожалуйста, введите дополнительные инструкции или тему для генерации поста. Используйте /cancel для отмены.";
 };
 
 const handleGeneratePost = async (bot, chatId, userId, userPrompt, size) => {
@@ -83,32 +83,32 @@ const handleGeneratePost = async (bot, chatId, userId, userPrompt, size) => {
 };
 
 const handleUnknownCommand = (bot, chatId) => {
-    return bot.sendMessage(chatId, 'Я тебя не понимаю, попробуй еще раз!');
+    return 'Я тебя не понимаю, попробуй еще раз!';
 };
 const handleSaveContext = async (bot, chatId, userId) => {
     waitingStates[chatId] = 'waiting_for_context_name';
-    await bot.sendMessage(chatId, "Введите имя для текущего контекста:");
+    return "Введите имя для текущего контекста:";
 };
-
 const handleListContexts = async (bot, chatId, userId) => {
     const contexts = userContexts[userId] || {};
     const contextList = Object.keys(contexts).join('\n');
-    await bot.sendMessage(chatId, contextList ? `Ваши сохраненные контексты:\n${contextList}` : "У вас нет сохраненных контекстов.");
+    return contextList ? `Ваши сохраненные контексты:\n${contextList}` : "У вас нет сохраненных контекстов.";
 };
 
 const handleSwitchContext = async (bot, chatId, userId) => {
     waitingStates[chatId] = 'waiting_for_context_switch';
     const contexts = userContexts[userId] || {};
     const contextList = Object.keys(contexts).join('\n');
-    await bot.sendMessage(chatId, contextList ? `Выберите контекст для переключения:\n${contextList}` : "У вас нет сохраненных контекстов.");
+    return contextList ? `Выберите контекст для переключения:\n${contextList}` : "У вас нет сохраненных контекстов.";
 };
+
 
 const handleCancel = (bot, chatId) => {
     if (waitingStates[chatId]) {
         delete waitingStates[chatId];
-        return bot.sendMessage(chatId, "Текущая операция отменена.");
+        return "Текущая операция отменена.";
     }
-    return bot.sendMessage(chatId, "Нет активных операций для отмены.");
+    return "Нет активных операций для отмены.";
 };
 
 module.exports = {
@@ -127,3 +127,4 @@ module.exports = {
     handleSwitchContext,
     waitingStates
 };
+
