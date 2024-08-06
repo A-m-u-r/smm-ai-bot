@@ -36,7 +36,7 @@ db.init().then(() => {
 });
 function createMainKeyboard(userId) {
     const keyboard = [
-        [{text: 'Промпт'},{text: 'Контекст'}],
+        [{text: 'Ask AI'},{text: 'Контекст'}],
         [ {text: 'Генерировать идеи'}, {text: 'Генерировать пост'}],
         [{text: 'Отмена'}]
     ];
@@ -64,8 +64,6 @@ function createContextKeyboard() {
         one_time_keyboard: false
     };
 }
-
-
 
 function createSizeKeyboard() {
     return {
@@ -120,12 +118,13 @@ const start = () => {
         const text = msg.text;
         const chatId = msg.chat.id;
         const userId = msg.from.id;
-
+        const comm = ['Установить контекст','Сохранить контекст','Список контекстов','Переключить контекст', 'Удалить контекст', 'Проверить контекст']
         if (waitingStates[chatId]) {
             if (text === '/cancel') {
                 return handleCancel(bot, chatId);
             }
-            if (text.startsWith('/')) {
+
+            if (text.startsWith('/') || comm.includes(text)) {
                 await bot.sendMessage(chatId, "Пожалуйста, сначала ответьте на предыдущий запрос или используйте /cancel для отмены текущей операции.", {
                     reply_markup: createMainKeyboard(isAdmin)
                 });
@@ -196,6 +195,7 @@ const start = () => {
             delete waitingStates[chatId];
             return;
         } else {
+
             let response;
             if (text.startsWith('/')) {
                 // Обработка команд
@@ -254,7 +254,7 @@ const start = () => {
                     case 'Инфо':
                         response = await handleInfo(bot, chatId, userId, msg.from.first_name);
                         break;
-                    case 'Промпт':
+                    case 'Ask AI':
                         response = await handlePrompt(bot, chatId, userId);
                         break;
                     case 'Контекст':

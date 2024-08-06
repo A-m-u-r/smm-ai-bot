@@ -18,7 +18,7 @@ const handlePrompt = async (bot, chatId, userId) => {
         return "У вас нет прав для использования этой команды.";
     }
     waitingStates[chatId] = 'waiting_for_prompt';
-    return "Пожалуйста, введите ваш запрос для Claude. Используйте /cancel для отмены.";
+    return "Пожалуйста, введите ваш запрос для искусственного интелекта. Используйте /cancel для отмены.";
 };
 
 const handleSetRole = async (bot, chatId, userId, args) => {
@@ -35,11 +35,17 @@ const handleSetRole = async (bot, chatId, userId, args) => {
 };
 
 const handleSetContext = async (bot, chatId, userId) => {
+    if (!await isAdmin(userId)) {
+        return "У вас нет прав для использования этой команды.";
+    }
     waitingStates[chatId] = 'waiting_for_context';
     return "Введите новый контекст:";
 };
 
 const handleGenerateIdeas = async (bot, chatId, userId) => {
+    if (!await isAdmin(userId)) {
+        return "У вас нет прав для использования этой команды.";
+    }
     const context = await contextManager.getActiveContext(userId);
     if (!context) {
         return "Пожалуйста, сначала установите контекст с помощью команды /setcontext";
@@ -55,6 +61,9 @@ const handleGenerateIdeas = async (bot, chatId, userId) => {
 };
 
 const handleGeneratePostPrompt = async (bot, chatId, userId) => {
+    if (!await isAdmin(userId)) {
+        return "У вас нет прав для использования этой команды.";
+    }
     const context = await contextManager.getActiveContext(userId);
     if (!context) {
         return "Пожалуйста, сначала установите контекст с помощью команды /setcontext";
@@ -63,6 +72,9 @@ const handleGeneratePostPrompt = async (bot, chatId, userId) => {
     return "Пожалуйста, введите дополнительные инструкции или тему для генерации поста. Используйте /cancel для отмены.";
 };
 const handleCheckActiveContext = async (bot, chatId, userId) => {
+    if (!await isAdmin(userId)) {
+        return "У вас нет прав для использования этой команды.";
+    }
     const activeContext = contextManager.getActiveContext(userId);
     if (activeContext) {
         const contextName = Object.keys(await contextManager.getContexts(userId)).find(key => contextManager.getContexts(userId)[key] === activeContext);
@@ -74,6 +86,9 @@ const handleCheckActiveContext = async (bot, chatId, userId) => {
 
 
 const handleGeneratePost = async (bot, chatId, userId, userPrompt, size) => {
+    if (!await isAdmin(userId)) {
+        return "У вас нет прав для использования этой команды.";
+    }
     const context = contextManager.getActiveContext(userId);
     if (!context) {
         return "Активный контекст не установлен. Пожалуйста, установите контекст перед генерацией поста.";
@@ -96,6 +111,9 @@ const handleUnknownCommand = (bot, chatId) => {
 };
 
 const handleSaveContext = async (bot, chatId, userId) => {
+    if (!await isAdmin(userId)) {
+        return "У вас нет прав для использования этой команды.";
+    }
     const activeContext = contextManager.getActiveContext(userId);
     if (!activeContext) {
         return "Активный контекст не установлен. Сначала установите контекст.";
@@ -106,12 +124,18 @@ const handleSaveContext = async (bot, chatId, userId) => {
 
 
 const handleListContexts = async (bot, chatId, userId) => {
+    if (!await isAdmin(userId)) {
+        return "У вас нет прав для использования этой команды.";
+    }
     const contexts = await contextManager.getContexts(userId);
     const contextList = Object.keys(contexts).join('\n');
     return contextList ? `Ваши сохраненные контексты:\n${contextList}` : "У вас нет сохраненных контекстов.";
 };
 
 const handleSwitchContext = async (bot, chatId, userId) => {
+    if (!await isAdmin(userId)) {
+        return "У вас нет прав для использования этой команды.";
+    }
     const contexts = await contextManager.getContexts(userId);
     if (Object.keys(contexts).length === 0) {
         return "У вас нет сохраненных контекстов.";
@@ -121,6 +145,9 @@ const handleSwitchContext = async (bot, chatId, userId) => {
     return `Доступные контексты:\n${contextList}\n\nВведите имя контекста, на который хотите переключиться:`;
 };
 const handleDeleteContext = async (bot, chatId, userId) => {
+    if (!await isAdmin(userId)) {
+        return "У вас нет прав для использования этой команды.";
+    }
     const contexts = await contextManager.getContexts(userId);
     if (Object.keys(contexts).length === 0) {
         return "У вас нет сохраненных контекстов.";
