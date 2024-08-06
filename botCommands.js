@@ -1,7 +1,6 @@
 const { askClaude } = require('./claudeApi');
 const { isAdmin, isSuperAdmin, setRole, getRole } = require('./userRoles');
 
-// Объявляем waitingStates здесь, чтобы он был доступен во всех функциях
 const waitingStates = {};
 
 const handleStart = async (bot, chatId) => {

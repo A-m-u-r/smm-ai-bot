@@ -170,17 +170,20 @@ const start = () => {
             case '/cancel':
                 await handleCancel(bot, chatId);
                 break;
-            case '/setrole':
+            default:
+                if (text.startsWith('/setrole')) {
+                    const args = text.split(' ').slice(1);
+                    return handleSetRole(bot, chatId, userId, args);
+                }
+           /* case '/setrole':
                 if (isSuperAdmin) {
                     await handleSetRole(bot, chatId, userId, []);
                 } else {
                     await bot.sendMessage(chatId, "У вас нет прав для использования этой команды.", {
                         reply_markup: createMainKeyboard(isAdmin)
                     });
-                }
-                break;
-            default:
-                await handleUnknownCommand(bot, chatId);
+                }*/
+                return handleUnknownCommand(bot, chatId);
         }
 
         // Отправляем клавиатуру после каждого сообщения, если не ожидаем ввода

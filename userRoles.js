@@ -3,12 +3,11 @@ const { superAdminId } = require('./config');
 const userRoles = {};
 
 const isAdmin = (userId) => {
-    return userId.toString() === superAdminId;
-    /*return userRoles[userId] === 'admin' || userId.toString() === superAdminId;*/
+    return userRoles[userId] === 'admin' || userId.toString() === superAdminId;
 };
 
 const isSuperAdmin = (userId) => {
-    return  false/*userId.toString() === superAdminId;*/
+    return userId.toString() === superAdminId;
 };
 
 const setRole = (userId, role) => {
