@@ -28,8 +28,7 @@ const userPrompts = {};
 function createMainKeyboard(userId) {
     const keyboard = [
         [{text: 'Старт'}, {text: 'Инфо'}, {text: 'Промпт'}],
-        [{text: 'Установить контекст'}, {text: 'Генерировать идеи'}, {text: 'Генерировать пост'}],
-        [{text: 'Сохранить контекст'}, {text: 'Список контекстов'}, {text: 'Переключить контекст'}],
+        [{text: 'Контекст'}, {text: 'Генерировать идеи'}, {text: 'Генерировать пост'}],
         [{text: 'Отмена'}]
     ];
 
@@ -43,6 +42,18 @@ function createMainKeyboard(userId) {
         one_time_keyboard: false
     };
 }
+function createContextKeyboard() {
+    return {
+        keyboard: [
+            [{text: 'Установить контекст'}, {text: 'Сохранить контекст'}],
+            [{text: 'Список контекстов'}, {text: 'Переключить контекст'}],
+            [{text: 'Назад'}]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: false
+    };
+}
+
 
 function createSizeKeyboard() {
     return {
@@ -215,18 +226,42 @@ const start = () => {
                     case 'Промпт':
                         response = await handlePrompt(bot, chatId, userId);
                         break;
+                    case 'Контекст':
+                        await bot.sendMessage(chatId, "Выберите действие с контекстом:", {
+                            reply_markup: createContextKeyboard()
+                        });
+                        return;
+                    case 'Назад':
+                        await bot.sendMessage(chatId, "Выберите команду:", {
+                            reply_markup: createMainKeyboard(userId)
+                        });
+                        return;
+
                     case 'Установить контекст':
                         response = await handleSetContext(bot, chatId, userId);
-                        break;
+                        await bot.sendMessage(chatId, response, {
+                            reply_markup: createContextKeyboard()
+                        });
+                        return;
                     case 'Сохранить контекст':
                         response = await handleSaveContext(bot, chatId, userId);
-                        break;
+                        await bot.sendMessage(chatId, response, {
+                            reply_markup: createContextKeyboard()
+                        });
+                        return;
                     case 'Список контекстов':
                         response = await handleListContexts(bot, chatId, userId);
-                        break;
+                        await bot.sendMessage(chatId, response, {
+                            reply_markup: createContextKeyboard()
+                        });
+                        return;
                     case 'Переключить контекст':
                         response = await handleSwitchContext(bot, chatId, userId);
-                        break;
+                        await bot.sendMessage(chatId, response, {
+                            reply_markup: createContextKeyboard()
+                        });
+                        return;
+
                     case 'Генерировать идеи':
                         response = await handleGenerateIdeas(bot, chatId, userId);
                         break;
