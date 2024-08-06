@@ -1,6 +1,18 @@
+// userRoles.js
 const { superAdminId } = require('./config');
+const db = require('./database');
 
-const userRoles = {};
+let userRoles = {};
+
+async function loadRoles() {
+    try {
+        userRoles = await db.getRoles();
+    } catch (error) {
+        console.error('Error loading roles:', error);
+    }
+}
+
+loadRoles();
 
 const isAdmin = (userId) => {
     return userRoles[userId] === 'admin' || userId.toString() === superAdminId;
@@ -10,7 +22,8 @@ const isSuperAdmin = (userId) => {
     return userId.toString() === superAdminId;
 };
 
-const setRole = (userId, role) => {
+const setRole = async (userId, role) => {
+    await db.saveRole(userId, role);
     userRoles[userId] = role;
 };
 

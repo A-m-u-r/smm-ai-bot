@@ -3,6 +3,7 @@ const { token } = require('./config');
 const { askClaude } = require('./claudeApi');
 const { isAdmin, isSuperAdmin, setRole, getRole } = require('./userRoles');
 const { activeContexts, userContexts } = require("./contextManager");
+const contextManager = require('./contextManager');
 
 const {
     handleStart,
@@ -19,16 +20,24 @@ const {
     handleSaveContext,
     handleListContexts,
     handleSwitchContext,
+    handleCheckActiveContext,
+    handleDeleteContext,
 } = require('./botCommands');
 
 const bot = new TelegramApi(token, {polling: true});
 
 const userPrompts = {};
-
+const db = require('./database');
+db.init().then(() => {
+    console.log('Database initialized');
+    start();
+}).catch(error => {
+    console.error('Error initializing database:', error);
+});
 function createMainKeyboard(userId) {
     const keyboard = [
-        [{text: 'Старт'}, {text: 'Инфо'}, {text: 'Промпт'}],
-        [{text: 'Контекст'}, {text: 'Генерировать идеи'}, {text: 'Генерировать пост'}],
+        [{text: 'Промпт'},{text: 'Контекст'}],
+        [ {text: 'Генерировать идеи'}, {text: 'Генерировать пост'}],
         [{text: 'Отмена'}]
     ];
 
@@ -42,17 +51,20 @@ function createMainKeyboard(userId) {
         one_time_keyboard: false
     };
 }
+
 function createContextKeyboard() {
     return {
         keyboard: [
             [{text: 'Установить контекст'}, {text: 'Сохранить контекст'}],
             [{text: 'Список контекстов'}, {text: 'Переключить контекст'}],
+            [{text: 'Удалить контекст'}, {text: 'Проверить контекст'}],
             [{text: 'Назад'}]
         ],
         resize_keyboard: true,
         one_time_keyboard: false
     };
 }
+
 
 
 function createSizeKeyboard() {
@@ -130,7 +142,7 @@ const start = () => {
                         reply_markup: createMainKeyboard(isAdmin)
                     });
                 } else if (waitingStates[chatId] === 'waiting_for_context') {
-                    activeContexts[userId] = text;
+                   await contextManager.setActiveContext(userId, text);
                     await bot.sendMessage(chatId, "Контекст успешно установлен.", {
                         reply_markup: createMainKeyboard(isAdmin)
                     });
@@ -141,17 +153,33 @@ const start = () => {
                     });
                     return;
                 } else if (waitingStates[chatId] === 'waiting_for_context_name') {
-                    if (!userContexts[userId]) userContexts[userId] = {};
-                    userContexts[userId][text] = activeContexts[userId];
-                    await bot.sendMessage(chatId, `Контекст "${text}" успешно сохранен.`);
+                    try {
+                        const activeContext = contextManager.getActiveContext(userId);
+                        await contextManager.saveContext(userId, text, activeContext);
+                        await bot.sendMessage(chatId, `Контекст "${text}" успешно сохранен.`);
+                    } catch (error) {
+                        console.error('Error saving context:', error);
+                        await bot.sendMessage(chatId, "Произошла ошибка при сохранении контекста.");
+                    }
                 } else if (waitingStates[chatId] === 'waiting_for_context_switch') {
-                    if (userContexts[userId] && userContexts[userId][text]) {
-                        activeContexts[userId] = userContexts[userId][text];
+                    const contexts = await contextManager.getContexts(userId);
+                    if (contexts[text]) {
+                        await contextManager.setActiveContext(userId, contexts[text]);
                         await bot.sendMessage(chatId, `Контекст успешно изменен на "${text}".`);
                     } else {
                         await bot.sendMessage(chatId, `Контекст "${text}" не найден.`);
                     }
+                }else if (waitingStates[chatId] === 'waiting_for_context_delete') {
+                    const contexts = await contextManager.getContexts(userId);
+                    if (contexts[text]) {
+                        await contextManager.deleteContext(userId, text);
+                        await bot.sendMessage(chatId, `Контекст "${text}" успешно удален.`);
+                    } else {
+                        await bot.sendMessage(chatId, `Контекст "${text}" не найден.`);
+                    }
                 }
+
+
                 if (waitingMessage) {
                     await bot.deleteMessage(chatId, waitingMessage.message_id);
                 }
@@ -195,6 +223,9 @@ const start = () => {
                     case '/switchcontext':
                         response = await handleSwitchContext(bot, chatId, userId);
                         break;
+                    case '/checkcontext':
+                        response = await handleCheckActiveContext(bot, chatId, userId);
+                        break;
                     case '/generateideas':
                         response = await handleGenerateIdeas(bot, chatId, userId);
                         break;
@@ -231,6 +262,19 @@ const start = () => {
                             reply_markup: createContextKeyboard()
                         });
                         return;
+                    case 'Удалить контекст':
+                        response = await handleDeleteContext(bot, chatId, userId);
+                        await bot.sendMessage(chatId, response, {
+                            reply_markup: createContextKeyboard()
+                        });
+                        return;
+                    case 'Проверить контекст':
+                        response = await handleCheckActiveContext(bot, chatId, userId);
+                        await bot.sendMessage(chatId, response, {
+                            reply_markup: createContextKeyboard()
+                        });
+                        return;
+
                     case 'Назад':
                         await bot.sendMessage(chatId, "Выберите команду:", {
                             reply_markup: createMainKeyboard(userId)
@@ -290,4 +334,3 @@ const start = () => {
         }
     })
 }
-start()
