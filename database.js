@@ -7,6 +7,8 @@ const db = new sqlite3.Database(path.join(__dirname, 'bot_data.db'));
 db.serialize(() => {
     db.run("CREATE TABLE IF NOT EXISTS contexts (userId TEXT, contextName TEXT, contextData TEXT, isActive INTEGER, PRIMARY KEY (userId, contextName))");
     db.run("CREATE TABLE IF NOT EXISTS roles (userId TEXT PRIMARY KEY, role TEXT)");
+    db.run("CREATE TABLE IF NOT EXISTS tokens (userId TEXT, inputTokens INTEGER, outputTokens INTEGER, time TEXT, prompt TEXT, PRIMARY KEY (userId, time))");
+    db.run("CREATE TABLE IF NOT EXISTS token_balances (userId TEXT PRIMARY KEY, balance INTEGER DEFAULT 0)");
 
 });
 
@@ -21,44 +23,76 @@ module.exports = {
             });
         });
     },
- /*   getTokens: (userId) => {
+    addTokens: (userId, amount) => {
         return new Promise((resolve, reject) => {
-            db.get("SELECT inputTokens, outputTokens FROM tokens WHERE userId = ?", [userId], (err, row) => {
+            db.run("UPDATE token_balances SET balance = balance + ? WHERE userId = ?", [amount, userId], function(err) {
                 if (err) {
-                    console.log(`Err get tokens for user ${userId}:`, err);
+                    console.log(`Err add tokens for user ${userId}:`, err);
+                    reject(err);
+                } else if (this.changes === 0) {
+                    // Если запись не была обновлена, значит ее нужно создать
+                    db.run("INSERT INTO token_balances (userId, balance) VALUES (?, ?)", [userId, amount], function(err) {
+                        if (err) {
+                            console.log(`Err add tokens for user ${userId}:`, err);
+                            reject(err);
+                        } else {
+                            console.log(`Added ${amount} tokens for user ${userId}`);
+                            resolve(this.lastID);
+                        }
+                    });
+                } else {
+                    console.log(`Added ${amount} tokens for user ${userId}`);
+                    resolve(this.lastID);
+                }
+            });
+        });
+    },
+
+    getBalance: (userId) => {
+        return new Promise((resolve, reject) => {
+            db.get("SELECT balance FROM token_balances WHERE userId = ?", [userId], (err, row) => {
+                if (err) {
+                    console.log(`Err get balance for user ${userId}:`, err);
                     reject(err);
                 } else {
-                    let result = null;
-                    if (row) {
-                        result = {
-                            inputTokens: row.inputTokens,
-                            outputTokens: row.outputTokens
-                        };
-                    }
-                    console.log(`Tokens ${userId}:`, result);
-                    resolve(result);
+                    const balance = row ? row.balance : 0;
+                    console.log(`Balance for user ${userId}: ${balance}`);
+                    resolve(balance);
+                }
+            });
+        });
+    },
+    spendTokens: (userId, amount) => {
+        return new Promise((resolve, reject) => {
+            db.run("UPDATE token_balances SET balance = balance - ? WHERE userId = ?", [amount, userId], function (err) {
+                if (err) {
+                    console.log(`Err spend tokens for user ${userId}:`, err);
+                    reject(err);
+                } else {
+                    console.log(`Spent ${amount} tokens for user ${userId}`);
+                    resolve(this.changes);
                 }
             });
         })
     },
+    addRequest: (userId, inputTokens, outputTokens, prompt) => {
+        const currentTime = new Date().toISOString();
 
-    addTokens: (userId, inputTokens, outputTokens) => {
         return new Promise((resolve, reject) => {
-            db.run("INSERT OR REPLACE INTO tokens (userId, inputTokens, outputTokens) VALUES (?, ?, ?)",
-                [userId, inputTokens, outputTokens],
+            db.run("INSERT OR REPLACE INTO tokens (userId, inputTokens, outputTokens, time, prompt) VALUES (?, ?, ?, ?, ?)",
+                [userId, inputTokens, outputTokens, currentTime, prompt],
                 function(err) {
                     if (err) {
                         console.log(`Err add tokens for user ${userId}:`, err);
                         reject(err);
                     } else {
-                        console.log(`Added tokens for user ${userId}: input=${inputTokens}, output=${outputTokens}`);
+                        console.log(`Added tokens for user ${userId}: input=${inputTokens}, output=${outputTokens}, time=${currentTime}, prompt=${prompt}`);
                         resolve(this.lastID);
                     }
                 }
             );
         })
     },
-*/
 
     saveContext: (userId, contextName, contextData, isActive) => {
         return new Promise((resolve, reject) => {

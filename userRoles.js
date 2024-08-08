@@ -1,6 +1,7 @@
 // userRoles.js
 const { superAdminId } = require('./config');
 const db = require('./database');
+const {getBalance} = require("./database");
 
 let userRoles = {};
 
@@ -13,7 +14,15 @@ async function loadRoles() {
 }
 
 loadRoles();
+const isBalance = async (userId) =>{
+    const response = await getBalance(userId)
+    if (response < 300) {
+        return false
+    }else{
+        return true;
+    }
 
+}
 const isAdmin = (userId) => {
     return userRoles[userId] === 'admin' || userId.toString() === superAdminId;
 };
@@ -32,4 +41,4 @@ const getRole = (userId) => {
     return userRoles[userId] || 'пользователь';
 };
 
-module.exports = { isAdmin, isSuperAdmin, setRole, getRole };
+module.exports = { isAdmin, isSuperAdmin, setRole, getRole,isBalance };

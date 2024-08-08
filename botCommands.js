@@ -1,7 +1,9 @@
 const { askClaude } = require('./claudeApi');
-const { isAdmin, isSuperAdmin, setRole, getRole } = require('./userRoles');
+const { isAdmin, isSuperAdmin, setRole, getRole, isBalance} = require('./userRoles');
 const contextManager = require('./contextManager');
 const { superAdminId } = require('./config');
+const {addRequest, addTokens} = require("./tokens");
+const {spendTokens} = require("./database");
 
 const waitingStates = {};
 
@@ -15,13 +17,23 @@ const handleInfo = async (bot, chatId, userId, firstName) => {
 };
 
 const handlePrompt = async (bot, chatId, userId) => {
-    if (!await isAdmin(userId)) {
-        return "У вас нет прав для использования этой команды.";
+    if (!await isBalance(userId)) {
+        return "У вас недостаточно токенов.";
     }
     waitingStates[chatId] = 'waiting_for_prompt';
-    return "Пожалуйста, введите ваш запрос для искусственного интелекта. Используйте /cancel для отмены.";
+    return "Пожалуйста, введите ваш запрос для искусственного интелекта. Используйте /cancel для отмены."
 };
-
+const handleAddTokens = async (bot, chatId, userId) => {
+    if (!await isSuperAdmin(userId)) {
+        return "Только супер-администратор может устанавливать токены.";
+    }
+    waitingStates[chatId] = 'waiting_for_add_tokens';
+    await bot.sendMessage(chatId, `Напишите кол-во токенов id пользователя в формате userId: count `);
+};
+const handleGetBalanceUser = async (bot, chatId, userId) => {
+    await bot.sendMessage(chatId, 'Введите id пользователя');
+    waitingStates[chatId] = 'waiting_for_get_tokens';
+};
 const handleSetRole = async (bot, chatId, userId, args) => {
     if (!await isSuperAdmin(userId)) {
         return "Только супер-администратор может устанавливать роли.";
@@ -35,16 +47,18 @@ const handleSetRole = async (bot, chatId, userId, args) => {
     return `Роль пользователя ${targetUserId} установлена как ${newRole}`;
 };
 const handleGenerateIdeas = async (bot, chatId, userId) => {
-    if (!await isAdmin(userId)) {
-        return "У вас нет прав для использования этой команды.";
+    if (!await isBalance(userId)) {
+        return "У вас недостаточно токенов.";
     }
     const context = await contextManager.getActiveContext(userId);
     if (!context) {
-        return "Пожалуйста, сначала установите контекст с помощью команды /setcontext";
+        return "Пожалуйста, сначала установите контекст с помощью команды \"Установить контекст\"";
     }
     const prompt = `Контекст: ${context.contextData}\n\nСгенерируйте 5 идей для постов, учитывая данный контекст.`;
     try {
         const response = await askClaude(prompt);
+        await addRequest(userId, response.usage.input_tokens,response.usage.output_tokens,prompt)
+        await spendTokens(userId, response.usage.output_tokens)
         return response.content[0].text;
     } catch (error) {
         console.error('Error generating ideas:', error);
@@ -53,8 +67,8 @@ const handleGenerateIdeas = async (bot, chatId, userId) => {
 };
 
 const handleGeneratePostPrompt = async (bot, chatId, userId) => {
-    if (!await isAdmin(userId)) {
-        return "У вас нет прав для использования этой команды.";
+    if (!await isBalance(userId)) {
+        return "У вас недостаточно токенов.";
     }
     const context = await contextManager.getActiveContext(userId);
     if (!context) {
@@ -65,8 +79,8 @@ const handleGeneratePostPrompt = async (bot, chatId, userId) => {
 };
 
 const handleGeneratePost = async (bot, chatId, userId, context, userPrompt, size) => {
-    if (!await isAdmin(userId)) {
-        return "У вас нет прав для использования этой команды.";
+    if (!await isBalance(userId)) {
+        return "У вас недостаточно токенов.";
     }
     if (!context) {
         return "Активный контекст не установлен. Пожалуйста, установите контекст перед генерацией поста.";
@@ -77,7 +91,9 @@ const handleGeneratePost = async (bot, chatId, userId, context, userPrompt, size
 
     try {
         const response = await askClaude(prompt);
+        await spendTokens(userId, response.usage.output_tokens)
         return response.content[0].text;
+
     } catch (error) {
         console.error('Error generating post:', error);
         return "Извините, произошла ошибка при генерации поста.";
@@ -100,9 +116,6 @@ const handleSetContext = async (bot, chatId, userId) => {
 
 
 const handleSaveContext = async (bot, chatId, userId) => {
-    if (!await isAdmin(userId)) {
-        return "У вас нет прав для использования этой команды.";
-    }
     waitingStates[chatId] = 'waiting_for_context_save';
     return "Введите название и содержание контекста в формате \n'название: контекст'\nНапример:\nПроект X: Детали проекта X, включая цели и сроки";
 };
@@ -115,6 +128,7 @@ const handleSaveContextConfirm = async (bot, chatId, userId, input) => {
     }
     try {
         await contextManager.saveContext(userId, contextName.trim(), contextData, false);
+        await contextManager.setActiveContext(userId, contextName.trim())
         return `Контекст "${contextName.trim()}" успешно сохранен.`;
     } catch (error) {
         console.error('Error saving context:', error);
@@ -122,23 +136,16 @@ const handleSaveContextConfirm = async (bot, chatId, userId, input) => {
     }
 };
 
-
 const handleListContexts = async (bot, chatId, userId) => {
-    if (!await isAdmin(userId)) {
-        return "У вас нет прав для использования этой команды.";
-    }
     const contexts = await contextManager.getContexts(userId);
     const contextList = Object.entries(contexts).map(([name, { isActive }]) =>
         `${name}${isActive ? ' (активный)' : ''}`
     ).join('\n');
     const activeContext = await contextManager.getActiveContext(userId);
-    return contextList ? `Ваши сохраненные контексты:\n${contextList}\n${activeContext.contextData} (активный)` : "У вас нет сохраненных контекстов.";
+    return contextList  ? `Ваши сохраненные контексты:\n${contextList}\n\nАктивный контекст - ${activeContext ? activeContext.contextData : 'не установелен'}` : "У вас нет сохраненных контекстов.";
 };
 
 const handleSwitchContext = async (bot, chatId, userId) => {
-    if (!await isAdmin(userId)) {
-        return "У вас нет прав для использования этой команды.";
-    }
     const contexts = await contextManager.getContexts(userId);
     if (Object.keys(contexts).length === 0) {
         return "У вас нет сохраненных контекстов.";
@@ -146,7 +153,7 @@ const handleSwitchContext = async (bot, chatId, userId) => {
     const contextList = Object.keys(contexts).join('\n');
     const activeContext = await contextManager.getActiveContext(userId);
     waitingStates[chatId] = 'waiting_for_context_switch';
-    return `Доступные контексты:\n${contextList}\n${activeContext.contextData} (активный)\n\nВведите имя контекста, на который хотите переключиться:`;
+    return `Доступные контексты:\n${contextList}\n\nАктивный контекст - ${activeContext ? activeContext.contextData : 'не установлен'}\n\nВведите имя контекста, на который хотите переключиться:`;
 };
 
 const handleSwitchContextConfirm = async (bot, chatId, userId, contextName) => {
@@ -179,16 +186,14 @@ const handleCheckActiveContext = async (bot, chatId, userId) => {
 };
 
 const handleDeleteContext = async (bot, chatId, userId) => {
-    if (!await isAdmin(userId)) {
-        return "У вас нет прав для использования этой команды.";
-    }
     const contexts = await contextManager.getContexts(userId);
     if (Object.keys(contexts).length === 0) {
         return "У вас нет сохраненных контекстов.";
     }
     const contextList = Object.keys(contexts).join('\n');
+    const activeContext = await contextManager.getActiveContext(userId);
     waitingStates[chatId] = 'waiting_for_context_delete';
-    return `Доступные контексты:\n${contextList}\n\nВведите имя контекста, который хотите удалить:`;
+    return `Доступные контексты:\n${contextList}\n${activeContext ? activeContext.contextName : ''}\n\nВведите имя контекста, который хотите удалить:`;
 };
 
 
@@ -206,7 +211,8 @@ module.exports = {
     handlePrompt,
     handleSetRole,
     handleUnknownCommand,
-   /* handleSetContext,*/
+    handleAddTokens,
+    handleGetBalanceUser,
     handleSaveContext,
     handleSaveContextConfirm,
     handleListContexts,
