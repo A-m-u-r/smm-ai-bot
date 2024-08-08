@@ -34,15 +34,6 @@ const handleSetRole = async (bot, chatId, userId, args) => {
     await setRole(targetUserId, newRole);
     return `Роль пользователя ${targetUserId} установлена как ${newRole}`;
 };
-
-const handleSetContext = async (bot, chatId, userId) => {
-    if (!await isAdmin(userId)) {
-        return "У вас нет прав для использования этой команды.";
-    }
-    waitingStates[chatId] = 'waiting_for_context';
-    return "Введите новый контекст:";
-};
-
 const handleGenerateIdeas = async (bot, chatId, userId) => {
     if (!await isAdmin(userId)) {
         return "У вас нет прав для использования этой команды.";
@@ -51,7 +42,7 @@ const handleGenerateIdeas = async (bot, chatId, userId) => {
     if (!context) {
         return "Пожалуйста, сначала установите контекст с помощью команды /setcontext";
     }
-    const prompt = `Контекст: ${context}\n\nСгенерируйте 5 идей для постов, учитывая данный контекст.`;
+    const prompt = `Контекст: ${context.contextData}\n\nСгенерируйте 5 идей для постов, учитывая данный контекст.`;
     try {
         const response = await askClaude(prompt);
         return response.content[0].text;
@@ -72,25 +63,11 @@ const handleGeneratePostPrompt = async (bot, chatId, userId) => {
     waitingStates[chatId] = 'waiting_for_post_prompt';
     return "Пожалуйста, введите дополнительные инструкции или тему для генерации поста. Используйте /cancel для отмены.";
 };
-const handleCheckActiveContext = async (bot, chatId, userId) => {
+
+const handleGeneratePost = async (bot, chatId, userId, context, userPrompt, size) => {
     if (!await isAdmin(userId)) {
         return "У вас нет прав для использования этой команды.";
     }
-    const activeContext = contextManager.getActiveContext(userId);
-    if (activeContext) {
-        const contextName = Object.keys(await contextManager.getContexts(userId)).find(key => contextManager.getContexts(userId)[key] === activeContext);
-        return `Текущий активный контекст:\nНазвание: ${contextName}\nТекст: ${activeContext}`;
-    } else {
-        return "Активный контекст не установлен.";
-    }
-};
-
-
-const handleGeneratePost = async (bot, chatId, userId, userPrompt, size) => {
-    if (!await isAdmin(userId)) {
-        return "У вас нет прав для использования этой команды.";
-    }
-    const context = contextManager.getActiveContext(userId);
     if (!context) {
         return "Активный контекст не установлен. Пожалуйста, установите контекст перед генерацией поста.";
     }
@@ -107,20 +84,42 @@ const handleGeneratePost = async (bot, chatId, userId, userPrompt, size) => {
     }
 };
 
+
 const handleUnknownCommand = (bot, chatId) => {
     return 'Я тебя не понимаю, попробуй еще раз!';
 };
+/*
+const handleSetContext = async (bot, chatId, userId) => {
+    if (!await isAdmin(userId)) {
+        return "У вас нет прав для использования этой команды.";
+    }
+    waitingStates[chatId] = 'waiting_for_context';
+    return "Введите новый контекст и его название в формате 'название: контекст':";
+};
+*/
+
 
 const handleSaveContext = async (bot, chatId, userId) => {
     if (!await isAdmin(userId)) {
         return "У вас нет прав для использования этой команды.";
     }
-    const activeContext = contextManager.getActiveContext(userId);
-    if (!activeContext) {
-        return "Активный контекст не установлен. Сначала установите контекст.";
+    waitingStates[chatId] = 'waiting_for_context_save';
+    return "Введите название и содержание контекста в формате \n'название: контекст'\nНапример:\nПроект X: Детали проекта X, включая цели и сроки";
+};
+
+const handleSaveContextConfirm = async (bot, chatId, userId, input) => {
+    const [contextName, ...contextParts] = input.split(':');
+    const contextData = contextParts.join(':').trim();
+    if (!contextName || !contextData) {
+        return "Неверный формат. Используйте 'название: контекст'.";
     }
-    waitingStates[chatId] = 'waiting_for_context_name';
-    return "Пожалуйста, введите имя для сохранения контекста:";
+    try {
+        await contextManager.saveContext(userId, contextName.trim(), contextData, false);
+        return `Контекст "${contextName.trim()}" успешно сохранен.`;
+    } catch (error) {
+        console.error('Error saving context:', error);
+        return "Произошла ошибка при сохранении контекста.";
+    }
 };
 
 
@@ -129,8 +128,11 @@ const handleListContexts = async (bot, chatId, userId) => {
         return "У вас нет прав для использования этой команды.";
     }
     const contexts = await contextManager.getContexts(userId);
-    const contextList = Object.keys(contexts).join('\n');
-    return contextList ? `Ваши сохраненные контексты:\n${contextList}` : "У вас нет сохраненных контекстов.";
+    const contextList = Object.entries(contexts).map(([name, { isActive }]) =>
+        `${name}${isActive ? ' (активный)' : ''}`
+    ).join('\n');
+    const activeContext = await contextManager.getActiveContext(userId);
+    return contextList ? `Ваши сохраненные контексты:\n${contextList}\n${activeContext.contextData} (активный)` : "У вас нет сохраненных контекстов.";
 };
 
 const handleSwitchContext = async (bot, chatId, userId) => {
@@ -142,9 +144,40 @@ const handleSwitchContext = async (bot, chatId, userId) => {
         return "У вас нет сохраненных контекстов.";
     }
     const contextList = Object.keys(contexts).join('\n');
+    const activeContext = await contextManager.getActiveContext(userId);
     waitingStates[chatId] = 'waiting_for_context_switch';
-    return `Доступные контексты:\n${contextList}\n\nВведите имя контекста, на который хотите переключиться:`;
+    return `Доступные контексты:\n${contextList}\n${activeContext.contextData} (активный)\n\nВведите имя контекста, на который хотите переключиться:`;
 };
+
+const handleSwitchContextConfirm = async (bot, chatId, userId, contextName) => {
+    try {
+        await contextManager.setActiveContext(userId, contextName);
+        return `Контекст успешно изменен на "${contextName}".`;
+    } catch (error) {
+        console.error('Error switching context:', error);
+        return "Произошла ошибка при переключении контекста.";
+    }
+};
+
+const handleCheckActiveContext = async (bot, chatId, userId) => {
+    if (!await isAdmin(userId)) {
+        return "У вас нет прав для использования этой команды.";
+    }
+    try {
+        const activeContext = await contextManager.getActiveContext(userId);
+        if (activeContext) {
+            const contextData = activeContext.contextData
+            const contextName = activeContext.contextName
+            return `Текущий активный контекст:\nНазвание: ${contextName || 'Без названия'}\nТекст: ${contextData}`;
+        } else {
+            return "Активный контекст не установлен.";
+        }
+    } catch (error) {
+        console.error('Error checking active context:', error);
+        return "Произошла ошибка при проверке активного контекста.";
+    }
+};
+
 const handleDeleteContext = async (bot, chatId, userId) => {
     if (!await isAdmin(userId)) {
         return "У вас нет прав для использования этой команды.";
@@ -173,15 +206,17 @@ module.exports = {
     handlePrompt,
     handleSetRole,
     handleUnknownCommand,
-    handleSetContext,
+   /* handleSetContext,*/
+    handleSaveContext,
+    handleSaveContextConfirm,
+    handleListContexts,
+    handleSwitchContext,
+    handleSwitchContextConfirm,
+    handleCheckActiveContext,
     handleGenerateIdeas,
     handleGeneratePost,
     handleGeneratePostPrompt,
     handleCancel,
-    handleSaveContext,
-    handleListContexts,
-    handleSwitchContext,
-    handleCheckActiveContext,
     handleDeleteContext,
     waitingStates
 };

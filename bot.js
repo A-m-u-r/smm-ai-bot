@@ -1,8 +1,8 @@
 const TelegramApi = require("node-telegram-bot-api");
-const { token, superAdminId} = require('./config');
-const { askClaude } = require('./claudeApi');
-const { isAdmin, isSuperAdmin, setRole, getRole } = require('./userRoles');
-const { activeContexts, userContexts } = require("./contextManager");
+const {token, superAdminId} = require('./config');
+const {askClaude} = require('./claudeApi');
+const {isAdmin, isSuperAdmin, setRole, getRole} = require('./userRoles');
+const {activeContexts, userContexts} = require("./contextManager");
 const contextManager = require('./contextManager');
 
 const {
@@ -11,7 +11,6 @@ const {
     handlePrompt,
     handleSetRole,
     handleUnknownCommand,
-    handleSetContext,
     handleGenerateIdeas,
     handleGeneratePost,
     handleGeneratePostPrompt,
@@ -22,6 +21,8 @@ const {
     handleSwitchContext,
     handleCheckActiveContext,
     handleDeleteContext,
+    handleSwitchContextConfirm,
+    handleSaveContextConfirm,
 } = require('./botCommands');
 
 const bot = new TelegramApi(token, {polling: true});
@@ -30,14 +31,18 @@ const userPrompts = {};
 const db = require('./database');
 db.init().then(() => {
     console.log('Database initialized');
+
+}).then(() => {
+    console.log('Contexts loaded');
     start();
 }).catch(error => {
-    console.error('Error initializing database:', error);
+    console.error('Error during initialization:', error);
 });
+
 function createMainKeyboard(userId) {
     const keyboard = [
-        [{text: 'Ask AI'},{text: 'Контекст'}],
-        [ {text: 'Генерировать идеи'}, {text: 'Генерировать пост'}],
+        [{text: 'Ask AI'}, {text: 'Контекст'}],
+        [{text: 'Генерировать идеи'}, {text: 'Генерировать пост'}],
         [{text: 'Отмена'}]
     ];
 
@@ -55,7 +60,7 @@ function createMainKeyboard(userId) {
 function createContextKeyboard() {
     return {
         keyboard: [
-            [{text: 'Установить контекст'}, {text: 'Сохранить контекст'}],
+            [/*{text: 'Установить контекст'},*/ {text: 'Сохранить контекст'}],
             [{text: 'Список контекстов'}, {text: 'Переключить контекст'}],
             [{text: 'Удалить контекст'}, {text: 'Проверить контекст'}],
             [{text: 'Назад'}]
@@ -83,7 +88,7 @@ const start = () => {
 
         if (data.startsWith('size_')) {
             const size = data.split('_')[1];
-            const context = activeContexts[userId];
+            const context = await contextManager.getActiveContext(userId);
             const prompt = userPrompts[userId];
 
             if (!context || !prompt) {
@@ -94,15 +99,15 @@ const start = () => {
             let waitingMessage;
             try {
                 waitingMessage = await bot.sendMessage(chatId, "Генерирую пост, пожалуйста, подождите...");
-                const response = await handleGeneratePost(bot, chatId, userId, context, prompt, size);
+                const response = await handleGeneratePost(bot, chatId, userId, context.contextData, prompt, size);
                 await bot.sendMessage(chatId, response, {
-                    reply_markup: createMainKeyboard(isAdmin)
+                    reply_markup: createMainKeyboard(userId)
                 });
                 await bot.deleteMessage(chatId, waitingMessage.message_id);
             } catch (error) {
                 console.error('Error:', error);
                 await bot.sendMessage(chatId, "Извините, произошла ошибка при генерации поста.", {
-                    reply_markup: createMainKeyboard(isAdmin)
+                    reply_markup: createMainKeyboard(userId)
                 });
                 if (waitingMessage) {
                     await bot.deleteMessage(chatId, waitingMessage.message_id);
@@ -111,19 +116,21 @@ const start = () => {
 
             await bot.answerCallbackQuery(query.id);
             delete waitingStates[chatId];
+            delete userPrompts[userId];
         }
+
     });
 
     bot.on('message', async msg => {
         const text = msg.text;
         const chatId = msg.chat.id;
         const userId = msg.from.id;
-        const comm = ['Установить контекст','Сохранить контекст','Список контекстов','Переключить контекст', 'Удалить контекст', 'Проверить контекст']
+        const comm = ['Установить контекст', 'Сохранить контекст', 'Список контекстов', 'Переключить контекст', 'Удалить контекст', 'Проверить контекст', 'Ask AI', 'Контекст', 'Генерировать идеи', 'Генерировать пост']
         if (waitingStates[chatId]) {
             if (text === '/cancel' || text === 'Отмена') {
                 return handleCancel(bot, chatId);
             }
-            if ( text === 'Назад' ) {
+            if (text === 'Назад') {
                 handleCancel(bot, chatId);
                 await bot.sendMessage(chatId, "Выберите команду:", {
                     reply_markup: createMainKeyboard(userId)
@@ -149,12 +156,27 @@ const start = () => {
                     await bot.sendMessage(chatId, response.content[0].text, {
                         reply_markup: createMainKeyboard(isAdmin)
                     });
-                } else if (waitingStates[chatId] === 'waiting_for_context') {
-                   await contextManager.setActiveContext(userId, text);
-                    await bot.sendMessage(chatId, "Контекст успешно установлен.", {
-                        reply_markup: createMainKeyboard(isAdmin)
-                    });
-                } else if (waitingStates[chatId] === 'waiting_for_post_prompt') {
+                }
+                if (waitingStates[chatId] === 'waiting_for_context') {
+                    response = await handleSaveContext(bot, chatId, userId, text);
+                }
+              /*  else if (waitingStates[chatId] === 'waiting_for_context_name') {
+                    try {
+                        const activeContext = await contextManager.getActiveContext(userId);
+                        await contextManager.saveContext(userId, text, activeContext);
+                        await bot.sendMessage(chatId, `Контекст "${text}" успешно сохранен.`);
+                    } catch (error) {
+                        console.error('Error saving context:', error);
+                        await bot.sendMessage(chatId, "Произошла ошибка при сохранении контекста.");
+                    }
+                }*/
+                else if (waitingStates[chatId] === 'waiting_for_context_save') {
+                    const [contextName, ...contextParts] = text.split(':');
+                    const contextData = contextParts.join(':').trim();
+                    console.log(contextName,contextData)
+                    response = await handleSaveContextConfirm(bot, chatId, userId, text);
+                }
+                else if (waitingStates[chatId] === 'waiting_for_post_prompt') {
                     await bot.sendMessage(superAdminId, `Пользователь ${msg.from.username || msg.from.first_name} (ID: ${userId}) отправил промпт на генерацию поста:\n\n${text}`);
 
                     userPrompts[userId] = text;
@@ -162,24 +184,11 @@ const start = () => {
                         reply_markup: createSizeKeyboard()
                     });
                     return;
-                } else if (waitingStates[chatId] === 'waiting_for_context_name') {
-                    try {
-                        const activeContext = contextManager.getActiveContext(userId);
-                        await contextManager.saveContext(userId, text, activeContext);
-                        await bot.sendMessage(chatId, `Контекст "${text}" успешно сохранен.`);
-                    } catch (error) {
-                        console.error('Error saving context:', error);
-                        await bot.sendMessage(chatId, "Произошла ошибка при сохранении контекста.");
-                    }
-                } else if (waitingStates[chatId] === 'waiting_for_context_switch') {
-                    const contexts = await contextManager.getContexts(userId);
-                    if (contexts[text]) {
-                        await contextManager.setActiveContext(userId, contexts[text]);
-                        await bot.sendMessage(chatId, `Контекст успешно изменен на "${text}".`);
-                    } else {
-                        await bot.sendMessage(chatId, `Контекст "${text}" не найден.`);
-                    }
-                }else if (waitingStates[chatId] === 'waiting_for_context_delete') {
+                }
+                else if (waitingStates[chatId] === 'waiting_for_context_switch') {
+                    response = await handleSwitchContextConfirm(bot, chatId, userId, text);
+                }
+                else if (waitingStates[chatId] === 'waiting_for_context_delete') {
                     const contexts = await contextManager.getContexts(userId);
                     if (contexts[text]) {
                         await contextManager.deleteContext(userId, text);
@@ -193,6 +202,11 @@ const start = () => {
                 if (waitingMessage) {
                     await bot.deleteMessage(chatId, waitingMessage.message_id);
                 }
+                delete waitingStates[chatId];
+                await bot.sendMessage(chatId, response, {
+                    reply_markup: createMainKeyboard(userId)
+                });
+                return;
 
             } catch (error) {
                 console.error('Error:', error);
@@ -222,9 +236,9 @@ const start = () => {
                     case '/prompt':
                         response = await handlePrompt(bot, chatId, userId, msg.from.username || msg.from.first_name);
                         break;
-                    case '/setcontext':
+                   /* case '/setcontext':
                         response = await handleSetContext(bot, chatId, userId);
-                        break;
+                        break;*/
                     case '/savecontext':
                         response = await handleSaveContext(bot, chatId, userId);
                         break;
@@ -286,18 +300,19 @@ const start = () => {
                         });
                         return;
 
+
                     case 'Назад':
                         await bot.sendMessage(chatId, "Выберите команду:", {
                             reply_markup: createMainKeyboard(userId)
                         });
                         return;
 
-                    case 'Установить контекст':
+                  /*  case 'Установить контекст':
                         response = await handleSetContext(bot, chatId, userId);
                         await bot.sendMessage(chatId, response, {
                             reply_markup: createContextKeyboard()
                         });
-                        return;
+                        return;*/
                     case 'Сохранить контекст':
                         response = await handleSaveContext(bot, chatId, userId);
                         await bot.sendMessage(chatId, response, {
