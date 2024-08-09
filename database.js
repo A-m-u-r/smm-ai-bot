@@ -53,7 +53,6 @@ module.exports = {
             db.get("SELECT balance FROM token_balances WHERE userId = ?", [userId], (err, row) => {
                 if (err) {
                     console.log(`Err get balance for user ${userId}:`, err);
-                    resolve(0)
                     reject(err);
                 } else {
                     const balance = row ? row.balance : 0;
@@ -63,6 +62,7 @@ module.exports = {
             });
         });
     },
+
     spendTokens: (userId, amount) => {
         return new Promise((resolve, reject) => {
             db.run("UPDATE token_balances SET balance = balance - ? WHERE userId = ?", [amount, userId], function (err) {
