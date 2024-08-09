@@ -25,13 +25,13 @@ module.exports = {
     },
     addTokens: (userId, amount) => {
         return new Promise((resolve, reject) => {
-            db.run("UPDATE token_balances SET balance = balance + ? WHERE userId = ?", [amount, userId], function(err) {
+            db.run("UPDATE token_balances SET balance = balance + ? WHERE userId = ?", [amount, userId], function (err) {
                 if (err) {
                     console.log(`Err add tokens for user ${userId}:`, err);
                     reject(err);
                 } else if (this.changes === 0) {
                     // Если запись не была обновлена, значит ее нужно создать
-                    db.run("INSERT INTO token_balances (userId, balance) VALUES (?, ?)", [userId, amount], function(err) {
+                    db.run("INSERT INTO token_balances (userId, balance) VALUES (?, ?)", [userId, amount], function (err) {
                         if (err) {
                             console.log(`Err add tokens for user ${userId}:`, err);
                             reject(err);
@@ -76,13 +76,37 @@ module.exports = {
             });
         })
     },
+    addUserWithInitialBalance: (userId) => {
+        const initialBalance = 5000;
+        return new Promise((resolve, reject) => {
+            db.get("SELECT * FROM token_balances WHERE userId = ?", [userId], (err, row) => {
+                if (err) {
+                    reject(err);
+                } else if (!row) {
+                    // Если пользователя нет в таблице, добавляем его с начальным балансом
+                    db.run("INSERT INTO token_balances (userId, balance) VALUES (?, ?)", [userId, initialBalance], (err) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            console.log(`Added user ${userId} with initial balance ${initialBalance}`);
+                            resolve();
+                        }
+                    });
+                } else {
+                    // Если пользователь уже есть в таблице, ничего не делаем
+                    resolve();
+                }
+            });
+        });
+    },
+
     addRequest: (userId, inputTokens, outputTokens, prompt) => {
         const currentTime = new Date().toISOString();
 
         return new Promise((resolve, reject) => {
             db.run("INSERT OR REPLACE INTO tokens (userId, inputTokens, outputTokens, time, prompt) VALUES (?, ?, ?, ?, ?)",
                 [userId, inputTokens, outputTokens, currentTime, prompt],
-                function(err) {
+                function (err) {
                     if (err) {
                         console.log(`Err add tokens for user ${userId}:`, err);
                         reject(err);

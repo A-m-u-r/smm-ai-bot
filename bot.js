@@ -30,7 +30,7 @@ const bot = new TelegramApi(token, {polling: true});
 const userPrompts = {};
 const db = require('./database');
 const {addTokens} = require("./tokens");
-const {getBalance, spendTokens} = require("./database");
+const {getBalance, spendTokens, addUserWithInitialBalance} = require("./database");
 db.init().then(() => {
     console.log('Database initialized');
 
@@ -257,6 +257,7 @@ const start = () => {
                 const args = text.split(' ').slice(1);
                 switch (command) {
                     case '/start':
+                        await addUserWithInitialBalance(userId)
                         response = await handleStart(bot, chatId);
                         break;
                     case '/info':
@@ -288,6 +289,9 @@ const start = () => {
                         break;
                     case '/cancel':
                         response = await handleCancel(bot, chatId);
+                        break;
+                    case '/getmyid':
+                        response = userId
                         break;
                     case '/setrole':
                         if (isSuperAdmin(userId)) {
