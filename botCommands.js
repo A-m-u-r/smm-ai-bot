@@ -126,6 +126,10 @@ const handleSaveContextConfirm = async (bot, chatId, userId, input) => {
     if (!contextName || !contextData) {
         return "Неверный формат. Используйте 'название: контекст'.";
     }
+    const contexts = await contextManager.getContexts(userId);
+    if(Object.keys(contexts).length === 9){
+        return "Превышено количество контекстов"
+    }
     try {
         await contextManager.saveContext(userId, contextName.trim(), contextData, false);
         await contextManager.setActiveContext(userId, contextName.trim())
