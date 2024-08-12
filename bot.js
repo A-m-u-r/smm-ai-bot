@@ -147,13 +147,35 @@ const start = () => {
         const chatId = msg.chat.id;
         const fileId = msg.photo[msg.photo.length - 1].file_id;
 
-        const fileLink = await bot.getFileLink(fileId);
-        const imagePath = path.join(__dirname, 'received_image.jpg');
-        const imageBuffer = await downloadFile(fileLink, imagePath);
-
-        const imageData = imageBuffer.toString('base64');
-
         try {
+            const fileLink = await bot.getFileLink(fileId);
+            const imageBuffer = await downloadFile(fileLink);
+
+            // Определяем тип изображения
+            const fileInfo = await bot.getFile(fileId);
+            const fileExtension = path.extname(fileInfo.file_path).toLowerCase();
+            let mediaType;
+
+            switch (fileExtension) {
+                case '.jpg':
+                case '.jpeg':
+                    mediaType = 'image/jpeg';
+                    break;
+                case '.png':
+                    mediaType = 'image/png';
+                    break;
+                case '.gif':
+                    mediaType = 'image/gif';
+                    break;
+                case '.webp':
+                    mediaType = 'image/webp';
+                    break;
+                default:
+                    mediaType = 'application/octet-stream'; // Общий тип для неизвестных форматов
+            }
+
+            const imageData = imageBuffer.toString('base64');
+
             const response = await axios.post('http://localhost:3001/api/anthropic', {
                 model: 'claude-3-5-sonnet-20240620',
                 max_tokens: 1024,
@@ -165,7 +187,7 @@ const start = () => {
                                 "type": 'image',
                                 "source": {
                                     "type": 'base64',
-                                    "media_type": 'image/jpeg',
+                                    "media_type": mediaType,
                                     "data": imageData,
                                 },
                             },
@@ -177,16 +199,16 @@ const start = () => {
 
             await bot.sendMessage(chatId, response.data.content[0].text);
         } catch (error) {
-            console.error('Error calling proxy server:', error);
-            await bot.sendMessage(chatId, 'Произошла ошибка при распознавании изображения');
+            console.error('Error processing image:', error);
+            await bot.sendMessage(chatId, 'Произошла ошибка при обработке изображения');
         }
     });
 
-    const downloadFile = async (fileLink, filePath) => {
+    const downloadFile = async (fileLink) => {
         const response = await axios.get(fileLink, {responseType: 'arraybuffer'});
-        fs.writeFileSync(filePath, Buffer.from(response.data, 'binary'));
-        return Buffer.from(response.data, 'binary');
+        return Buffer.from(response.data);
     };
+
 
     bot.on('message', async msg => {
         const text = msg.text;
