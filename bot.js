@@ -147,16 +147,13 @@ const start = () => {
         const chatId = msg.chat.id;
         const fileId = msg.photo[msg.photo.length - 1].file_id;
 
-        // Получаем файл изображения
         const fileLink = await bot.getFileLink(fileId);
         const imagePath = path.join(__dirname, 'received_image.jpg');
         const imageBuffer = await downloadFile(fileLink, imagePath);
 
-        // Преобразуем буфер изображения в base64
         const imageData = imageBuffer.toString('base64');
 
         try {
-            // Отправляем запрос к прокси-серверу
             const response = await axios.post('http://localhost:3001/api/anthropic', {
                 model: 'claude-3-5-sonnet-20240620',
                 max_tokens: 1024,
@@ -178,7 +175,6 @@ const start = () => {
                 ],
             });
 
-            // Отправляем результат распознавания пользователю
             await bot.sendMessage(chatId, response.data.content[0].text);
         } catch (error) {
             console.error('Error calling proxy server:', error);
@@ -186,7 +182,6 @@ const start = () => {
         }
     });
 
-// Функция для загрузки файла по ссылке
     const downloadFile = async (fileLink, filePath) => {
         const response = await axios.get(fileLink, {responseType: 'arraybuffer'});
         fs.writeFileSync(filePath, Buffer.from(response.data, 'binary'));
